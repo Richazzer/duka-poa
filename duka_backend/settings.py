@@ -1,11 +1,11 @@
 import os
 from pathlib import Path
 from datetime import timedelta
-
+import dj_database_url
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = 'django-insecure-duka-pooa-pos-production-key'
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = ['*']
 
 # Add allauth & rest_framework installed apps
@@ -67,6 +67,7 @@ DEFAULT_FROM_EMAIL = 'Duka Pooa POS <richazzerjoseph366@gmail.com>'
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -99,13 +100,20 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-# Ensure CORS allows your Vite frontend port (5173)
+DATABASES = {
+    'default': dj_database_url.config(
+        default=f"sqlite:///{os.path.join(BASE_DIR, 'db.sqlite3')}",
+        conn_max_age=600
+    )
+}
+
+# CORS Configuration - Allow Cloudflare Pages frontend
 CORS_ALLOWED_ORIGINS = [
+    "https://duka-pooa.pages.dev",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
-# Or for local development:
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
 
 ROOT_URLCONF = 'duka_backend.urls'
 
@@ -127,12 +135,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'duka_backend.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
 
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'Africa/Dar_es_Salaam'

@@ -2,6 +2,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import get_user_model
 from .models import Product, Sale, CustomerDebt
+from .models import BusinessProfile
 
 User = get_user_model()
 
@@ -47,3 +48,9 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
             'refresh': str(refresh),
             'access': str(refresh.access_token),
         }
+        
+class BusinessOnboardingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BusinessProfile
+        fields = ['business_name', 'business_type', 'goals', 'is_onboarded']
+        read_only_fields = ['is_onboarded']

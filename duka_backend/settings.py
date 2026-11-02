@@ -5,11 +5,12 @@ import dj_database_url
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = 'django-insecure-duka-pooa-pos-production-key'
-DEBUG = os.environ.get('DEBUG', 'False') == 'True'
+DEBUG = True
 ALLOWED_HOSTS = ['*']
 
 # Add allauth & rest_framework installed apps
 INSTALLED_APPS = [
+    'jazzmin',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -102,16 +103,20 @@ SIMPLE_JWT = {
 
 DATABASES = {
     'default': dj_database_url.config(
-        default=f"sqlite:///{os.path.join(BASE_DIR, 'db.sqlite3')}",
-        conn_max_age=600
+        # If DATABASE_URL environment variable exists (production), use it. 
+        # Otherwise, default to a local SQLite database for easy local testing!
+        default=os.environ.get('DATABASE_URL', f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
+        conn_max_age=600,
     )
 }
 
 # CORS Configuration - Allow Cloudflare Pages frontend
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
     "https://duka-pooa.pages.dev",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://192.168.1.12:5173",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
@@ -143,3 +148,20 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+JAZZMIN_SETTINGS = {
+    "site_title": "Duka Poa Admin",
+    "site_header": "Duka Poa POS",
+    "site_brand": "Duka Poa Management",
+    "welcome_sign": "Welcome to Duka Poa Admin Portal",
+    "copyright": "Duka Poa Ltd",
+    
+    # UI Customizer
+    "show_ui_builder": True, 
+    
+    # Top Menu Links
+    "topmenu_links": [
+        {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"]},
+        {"model": "auth.User"},
+    ],
+}

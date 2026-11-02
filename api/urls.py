@@ -1,15 +1,18 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from api.views import (
-    ProductViewSet, SaleViewSet, CustomerDebtViewSet, 
-    ocr_invoice_scanner_view, send_email_otp, verify_email_otp
-)
-from api.economics import calculate_business_metrics
-from rest_framework_simplejwt.views import TokenRefreshView, TokenBlacklistView, TokenObtainPairView
-from api.serializers import EmailTokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenRefreshView, TokenBlacklistView
 
-class EmailTokenObtainPairView(TokenObtainPairView):
-    serializer_class = EmailTokenObtainPairSerializer
+from .views import (
+    login_view,
+    send_email_otp,
+    verify_email_otp,
+    CompleteOnboardingView,
+    business_analytics_view,
+    ocr_invoice_scanner_view,
+    ProductViewSet,
+    SaleViewSet,
+    CustomerDebtViewSet
+)
 
 router = DefaultRouter()
 router.register(r'products', ProductViewSet)
@@ -21,8 +24,15 @@ urlpatterns = [
     path('ocr/scan/', ocr_invoice_scanner_view, name='ocr-scan'),
     path('auth/send-otp/', send_email_otp, name='send-otp'),
     path('auth/verify-otp/', verify_email_otp, name='verify-otp'),
-    path('analytics/economics/', calculate_business_metrics, name='business-economics'),
-    path('auth/login/', EmailTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    
+    # Economics & Analytics
+    path('analytics/economics/', business_analytics_view, name='business-economics'),
+    
+    # Auth Endpoints
+    path('auth/login/', login_view, name='login'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/logout/', TokenBlacklistView.as_view(), name='token_blacklist'),
+    
+    # Onboarding
+    path('onboarding/', CompleteOnboardingView.as_view(), name='complete-onboarding'),
 ]

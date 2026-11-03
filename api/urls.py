@@ -11,7 +11,8 @@ from .views import (
     ocr_invoice_scanner_view,
     ProductViewSet,
     SaleViewSet,
-    CustomerDebtViewSet
+    CustomerDebtViewSet,
+    expenses_view
 )
 
 router = DefaultRouter()
@@ -21,6 +22,7 @@ router.register(r'debts', CustomerDebtViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('expenses/', expenses_view, name='expenses'), 
     path('ocr/scan/', ocr_invoice_scanner_view, name='ocr-scan'),
     path('auth/send-otp/', send_email_otp, name='send-otp'),
     path('auth/verify-otp/', verify_email_otp, name='verify-otp'),

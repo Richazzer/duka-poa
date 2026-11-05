@@ -12,7 +12,8 @@ from .views import (
     ProductViewSet,
     SaleViewSet,
     CustomerDebtViewSet,
-    expenses_view
+    expenses_view,
+    gemini_ai_assistant_view 
 )
 
 router = DefaultRouter()
@@ -29,6 +30,8 @@ urlpatterns = [
     
     # Economics & Analytics
     path('analytics/economics/', business_analytics_view, name='business-economics'),
+    
+    path('ai/chat/', gemini_ai_assistant_view, name='ai-chat'),
     
     # Auth Endpoints
     path('auth/login/', login_view, name='login'),

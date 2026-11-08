@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import urllib.request
 from datetime import date, timedelta
 from collections import defaultdict
 from django.db.models import Sum, Count, F, Max, Min, Q
@@ -832,3 +833,55 @@ def gemini_ai_assistant_view(request):
             "sales_total": sales_total
         }
     }, status=status.HTTP_200_OK)
+    
+    
+    
+
+
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def google_auth_view(request):
+    """
+    Verifies Google ID token directly with Google and issues JWT tokens.
+    """
+    credential = request.data.get('credential')
+    if not credential:
+        return Response({'error': 'Token ya Google inahitajika.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        # Verify token directly with Google's servers
+        google_verify_url = f"https://oauth2.googleapis.com/tokeninfo?id_token={credential}"
+        req = urllib.request.Request(google_verify_url)
+        with urllib.request.urlopen(req) as resp:
+            google_data = json.loads(resp.read().decode('utf-8'))
+
+        email = google_data.get('email')
+        if not email:
+            return Response({'error': 'Barua pepe haijapatikana kutoka Google.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get or create user
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            user = User.objects.create(username=email, email=email)
+            user.set_unusable_password()
+            user.save()
+
+        profile, _ = BusinessProfile.objects.get_or_create(user=user)
+        refresh = RefreshToken.for_user(user)
+
+        return Response({
+            'message': 'Umeingia kwa Google kwa mafanikio!',
+            'access_token': str(refresh.access_token),
+            'refresh_token': str(refresh),
+            'is_onboarded': profile.is_onboarded,
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'is_onboarded': profile.is_onboarded,
+            }
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print(f"❌ [GOOGLE AUTH ERROR]: {e}", flush=True)
+        return Response({'error': 'Imeshindikana kuthibitisha akaunti ya Google.'}, status=status.HTTP_400_BAD_REQUEST)

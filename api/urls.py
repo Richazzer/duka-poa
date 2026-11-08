@@ -13,7 +13,8 @@ from .views import (
     SaleViewSet,
     CustomerDebtViewSet,
     expenses_view,
-    gemini_ai_assistant_view 
+    gemini_ai_assistant_view,
+    google_auth_view
 )
 
 router = DefaultRouter()
@@ -35,6 +36,7 @@ urlpatterns = [
     
     # Auth Endpoints
     path('auth/login/', login_view, name='login'),
+    path('auth/google/', google_auth_view, name='google-auth'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/logout/', TokenBlacklistView.as_view(), name='token_blacklist'),
     

@@ -69,7 +69,6 @@ DEFAULT_FROM_EMAIL = 'Duka Pooa POS <richazzerjoseph366@gmail.com>'
 
 
 MIDDLEWARE = [
-    'django.middleware.gzip.GZipMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -77,6 +76,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.middleware.gzip.GZipMiddleware',
     
     # ADD THIS LINE RIGHT HERE:
     'allauth.account.middleware.AccountMiddleware',
@@ -126,7 +126,8 @@ CORS_ALLOWED_ORIGINS = [
     "https://duka-poa-face.vercel.app",
 ]
 CORS_ALLOW_CREDENTIALS = True
-
+CORS_ALLOW_HEADERS = ['*']
+CORS_ALLOW_METHODS = ['*']
 ROOT_URLCONF = 'duka_backend.urls'
 
 TEMPLATES = [

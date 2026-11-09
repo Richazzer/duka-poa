@@ -39,8 +39,8 @@ urlpatterns = [
     # Economics & Analytics
     path('analytics/economics/', business_analytics_view, name='business-economics'),
     
-    path('ai/chat/', gemini_ai_assistant_view, name='ai-chat'),   # old, delete this
-    path('ai/chat/',  ai_chat_view),   
+    path('ai/chat/',  ai_chat_view, name='ai-chat'),
+    path('ai/apply/', ai_apply_view, name='ai-apply'),
     # Auth Endpoints
     
    

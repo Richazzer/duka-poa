@@ -24,13 +24,17 @@ router.register(r'sales', SaleViewSet)
 router.register(r'debts', CustomerDebtViewSet)
 
 urlpatterns = [
-    path('health/', health_check, name='health-check'),
-    
     path('', include(router.urls)),
-    path('expenses/', expenses_view, name='expenses'), 
-    path('ocr/scan/', ocr_invoice_scanner_view, name='ocr-scan'),
+    path('health/', health_check, name='health-check'),
+    path('auth/google/', google_auth_view, name='google-auth'),
     path('auth/send-otp/', send_email_otp, name='send-otp'),
     path('auth/verify-otp/', verify_email_otp, name='verify-otp'),
+    path('auth/login/', login_view, name='login'),
+   
+    path('expenses/', expenses_view, name='expenses'), 
+    path('ocr/scan/', ocr_invoice_scanner_view, name='ocr-scan'),
+    
+    
     
     # Economics & Analytics
     path('analytics/economics/', business_analytics_view, name='business-economics'),
@@ -38,8 +42,8 @@ urlpatterns = [
     path('ai/chat/', gemini_ai_assistant_view, name='ai-chat'),
     
     # Auth Endpoints
-    path('auth/login/', login_view, name='login'),
-    path('auth/google/', google_auth_view, name='google-auth'),
+    
+   
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/logout/', TokenBlacklistView.as_view(), name='token_blacklist'),
     

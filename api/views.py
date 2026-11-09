@@ -899,3 +899,15 @@ def google_auth_view(request):
     except Exception as e:
         print(f"❌ [GOOGLE AUTH ERROR]: {e}", flush=True)
         return Response({'error': 'Imeshindikana kuthibitisha akaunti ya Google.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def health_check(request):
+    """
+    Lightweight health endpoint for 24/7 uptime pings.
+    Responds in 10ms without touching the database.
+    """
+    return Response({"status": "active", "service": "Duka Poa API"}, status=status.HTTP_200_OK)

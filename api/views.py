@@ -93,66 +93,6 @@ def login_view(request):
 # =====================================================================
 
 
-@api_view(['POST'])
-@authentication_classes([])
-@permission_classes([AllowAny])
-def send_email_otp(request):
-    """
-    Bulletproof OTP generator. Sends email via SMTP safely (fail_silently=True)
-    and logs OTP directly to Render console so you never get locked out.
-    """
-    raw_email = request.data.get('email', '')
-    email = str(raw_email).strip().lower()
-
-    if not email:
-        return Response({'error': 'Barua pepe inahitajika'}, status=status.HTTP_400_BAD_REQUEST)
-
-    # 1. Safe user lookup (checks both email and username safely)
-    user = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email)).first()
-    if not user:
-        try:
-            user = User.objects.create(username=email, email=email)
-            user.set_unusable_password()
-            user.save()
-        except Exception:
-            # If username collision occurs, reuse the existing user
-            user = User.objects.filter(username__iexact=email).first()
-
-    if not user:
-        return Response({'error': 'Hitilafu ya kuunda akaunti. Jaribu tena.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    # 2. Generate and save OTP record
-    otp_code = EmailOTP.generate_otp()
-    EmailOTP.objects.create(user=user, otp=otp_code)
-
-    # 3. ALWAYS PRINT TO RENDER LOGS (Visible in Render Dashboard -> Logs)
-    print("\n" + "=" * 50, flush=True)
-    print(f"🔥 [DUKA POOA LIVE OTP]", flush=True)
-    print(f"📩 USER EMAIL: {email}", flush=True)
-    print(f"🔑 OTP CODE  : >>> {otp_code} <<<", flush=True)
-    print("=" * 50 + "\n", flush=True)
-
-    # 4. Send email safely via Gmail SMTP (fail_silently=True prevents 500 crashes)
-    subject = "Nambari yako ya Uhakiki (OTP) - Duka Pooa POS"
-    message = f"Habari! Nambari yako ya siri ya uhakiki (OTP) ni: {otp_code}"
-    
-    try:
-        from django.conf import settings
-        # Use actual Gmail address as sender so Gmail SMTP doesn't reject it
-        sender_email = getattr(settings, 'EMAIL_HOST_USER', None) or 'richazzerjoseph366@gmail.com'
-        from_email = f"Duka Pooa POS <{sender_email}>"
-        
-        send_mail(subject, message, from_email, [email], fail_silently=True)
-    except Exception as smtp_err:
-        print(f"⚠️ [SMTP WARNING]: {smtp_err}", flush=True)
-
-    # Always return 200 success with clear feedback
-    return Response({
-        'success': True,
-        'message': 'OTP imetengenezwa kikamilifu.',
-        'email': email
-    }, status=status.HTTP_200_OK)
-
 # =====================================================================
 # 3. GOOGLE AUTH (DIRECT LOGIN OR SIGNUP WITH OTP)
 # =====================================================================
@@ -251,25 +191,121 @@ def google_auth_view(request):
         return Response({'error': f'Imeshindikana: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
 
+
+
+# =====================================================================
+# 1. SEND OTP VIEW (RESILIENT EMAIL & RENDER CONSOLE LOGGING)
+# =====================================================================
+
 @api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def send_email_otp(request):
+    """
+    Generates OTP for Sign-Up.
+    1. Logs OTP directly to Render console (visible in Render Dashboard -> Logs).
+    2. Sends email via Resend HTTPS API (if configured).
+    3. Falls back safely to Gmail SMTP without ever crashing the API.
+    """
+    raw_email = request.data.get('email', '')
+    email = str(raw_email).strip().lower()
+
+    if not email:
+        return Response({'error': 'Barua pepe inahitajika.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 1. Safe user lookup or creation
+    user = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email)).first()
+    if not user:
+        try:
+            user = User.objects.create(username=email, email=email)
+            user.set_unusable_password()
+            user.save()
+        except Exception:
+            user = User.objects.filter(username__iexact=email).first()
+
+    if not user:
+        return Response({'error': 'Hitilafu ya kuunda akaunti. Jaribu tena.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # 2. Generate and save OTP record
+    otp_code = EmailOTP.generate_otp()
+    EmailOTP.objects.create(user=user, otp=otp_code)
+
+    # 3. 💥 ALWAYS PRINT IN RENDER LOGS SO YOU NEVER MISS IT 💥
+    print("\n" + "=" * 50, flush=True)
+    print("🔥 [DUKA POOA LIVE OTP]", flush=True)
+    print(f"📩 USER EMAIL: {email}", flush=True)
+    print(f"🔑 OTP CODE  : >>> {otp_code} <<<", flush=True)
+    print("=" * 50 + "\n", flush=True)
+
+    # 4. Attempt delivery via Resend HTTPS API (Never blocked by Render!)
+    resend_key = os.environ.get('RESEND_API_KEY')
+    email_delivered = False
+
+    if resend_key:
+        try:
+            import resend
+            resend.api_key = resend_key
+            resend.Emails.send({
+                "from": "Duka Poa POS <onboarding@resend.dev>",
+                "to": [email],
+                "subject": "Nambari yako ya Uhakiki (OTP) - Duka Pooa POS",
+                "html": (
+                    f"<div style='font-family:sans-serif;padding:24px;border-radius:16px;background:#f8fafc;'>"
+                    f"<h2 style='color:#0f172a;margin-bottom:8px;'>Duka Poa POS</h2>"
+                    f"<p style='color:#475569;'>Habari! Nambari yako ya siri ya uhakiki (OTP) ni:</p>"
+                    f"<h1 style='color:#2563eb;letter-spacing:6px;font-size:32px;margin:16px 0;'>{otp_code}</h1>"
+                    f"<p style='color:#94a3b8;font-size:12px;'>Kama hukuomba nambari hii, tafadhali puuza ujumbe huu.</p>"
+                    f"</div>"
+                )
+            })
+            email_delivered = True
+            print(f"✅ [RESEND EMAIL DELIVERED TO {email}]", flush=True)
+        except Exception as resend_err:
+            print(f"⚠️ [RESEND NOTICE]: {resend_err}", flush=True)
+
+    # 5. Fallback: Attempt delivery via Django SMTP if Resend is not set
+    if not email_delivered:
+        try:
+            from django.conf import settings
+            sender_email = getattr(settings, 'EMAIL_HOST_USER', None) or 'richazzerjoseph366@gmail.com'
+            from_email = f"Duka Pooa POS <{sender_email}>"
+            subject = "Nambari yako ya Uhakiki (OTP) - Duka Pooa POS"
+            message = f"Habari! Nambari yako ya siri ya uhakiki (OTP) ya Duka Poa ni: {otp_code}"
+            
+            send_mail(subject, message, from_email, [email], fail_silently=True)
+            print(f"✅ [SMTP EMAIL ATTEMPTED TO {email}]", flush=True)
+        except Exception as smtp_err:
+            print(f"⚠️ [SMTP NOTICE]: {smtp_err}", flush=True)
+
+    # Always return 200 OK so the user is never blocked
+    return Response({
+        'success': True,
+        'message': 'OTP imetengenezwa kikamilifu.',
+        'email': email
+    }, status=status.HTTP_200_OK)
+
+
+# =====================================================================
+# 2. VERIFY OTP VIEW (ACTIVATES USER & ISSUES JWT TOKENS)
+# =====================================================================
+
+@api_view(['POST'])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def verify_email_otp(request):
     """
-    Verifies OTP during registration, guarantees password is saved, and returns JWT tokens.
+    Verifies OTP during registration, saves password, and returns JWT tokens.
     """
-    email = (request.data.get('email') or '').strip()
+    email = (request.data.get('email') or '').strip().lower()
     otp_code = (request.data.get('otp') or '').strip()
     password = request.data.get('password')
 
-    print(f"\n🔐 [VERIFY OTP REQUEST] Email: {email} | Code: {otp_code} | Password provided: {bool(password)}", flush=True)
+    print(f"\n🔐 [VERIFY OTP REQUEST] Email: {email} | Code: {otp_code} | Has Password: {bool(password)}", flush=True)
 
     if not email or not otp_code:
         return Response({'error': 'Barua pepe na namba ya OTP zinahitajika.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = User.objects.filter(email__iexact=email).first()
-    if not user:
-        user = User.objects.filter(username__iexact=email).first()
-
+    user = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email)).first()
     if not user:
         return Response({'error': 'Mtumiaji hajapatikana.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -278,14 +314,15 @@ def verify_email_otp(request):
         otp_record.is_verified = True
         otp_record.save()
 
-        if password:
+        # Set user password securely
+        if password and password != 'GoogleAuthUser':
             user.set_password(password)
             user.save()
-            print(f"🔒 [PASSWORD SET] Nenosiri limewekwa kikamilifu kwa {user.email}", flush=True)
+            print(f"🔒 [PASSWORD SET] Nenosiri limewekwa kwa {user.email}", flush=True)
 
         profile, _ = BusinessProfile.objects.get_or_create(user=user)
         refresh = RefreshToken.for_user(user)
-        
+
         return Response({
             'message': 'Uhakiki umefanikiwa!',
             'access_token': str(refresh.access_token),
@@ -300,8 +337,6 @@ def verify_email_otp(request):
 
     except EmailOTP.DoesNotExist:
         return Response({'error': 'Namba ya OTP siyo sahihi au imekwisha muda wake.'}, status=status.HTTP_400_BAD_REQUEST)
-
-
 # =====================================================================
 # ONBOARDING VIEW
 # =====================================================================

@@ -65,7 +65,7 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'richazzerjoseph366@gmail.com'
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', 'mezz fzfs wtho pncp')
-DEFAULT_FROM_EMAIL = 'Duka Pooa POS <support@duka.com>'
+DEFAULT_FROM_EMAIL = 'Duka Pooa POS <richazzerjoseph366@gmail.com>'
 
 
 MIDDLEWARE = [

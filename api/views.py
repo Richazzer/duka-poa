@@ -141,9 +141,37 @@ def field(model, role, required=True):
     return name
 
 
+_warned_models = set()
+
+
 def owned(model, user):
-    """Queryset limited to the logged-in shop owner's rows."""
-    return model.objects.filter(**{field(model, 'owner'): user})
+    """
+    Queryset limited to the logged-in shop owner's rows.
+
+    If the model has no owner field yet (no `user` foreign key), the app keeps working but
+    every shop shares the same rows. Add the field (see README steps) to separate shops.
+    Set STRICT_TENANT_ISOLATION=1 to refuse to run without it.
+    """
+    owner_f = _resolve(model, 'owner')
+    if owner_f is None:
+        if os.environ.get('STRICT_TENANT_ISOLATION') == '1':
+            raise ImproperlyConfigured(
+                f"{model.__name__} has no owner field (a ForeignKey to the user model)."
+            )
+        if model not in _warned_models:
+            _warned_models.add(model)
+            logger.warning(
+                '%s has no owner field: all shops share these rows. Add a `user` ForeignKey.',
+                model.__name__,
+            )
+        return model.objects.all()
+    return model.objects.filter(**{owner_f: user})
+
+
+def owner_kwargs(model, user):
+    """Extra kwargs for serializer.save() so new rows belong to the logged-in user."""
+    owner_f = _resolve(model, 'owner')
+    return {owner_f: user} if owner_f else {}
 
 
 def _internal_type(model, name):
@@ -812,16 +840,25 @@ class OwnedModelViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return owned(self.model, self.request.user).order_by('-pk')
 
+    def get_serializer(self, *args, **kwargs):
+        serializer = super().get_serializer(*args, **kwargs)
+        owner_f = _resolve(self.model, 'owner')
+        fields = serializer.child.fields if hasattr(serializer, 'child') else serializer.fields
+        if owner_f and owner_f in fields:
+            fields[owner_f].read_only = True  # set by the server from the login token
+            fields[owner_f].required = False
+        return serializer
+
     def _validate(self, serializer):
         """Hook for subclasses: raise ValidationError on bad numbers."""
 
     def perform_create(self, serializer):
         self._validate(serializer)
-        serializer.save(**{field(self.model, 'owner'): self.request.user})
+        serializer.save(**owner_kwargs(self.model, self.request.user))
 
     def perform_update(self, serializer):
         self._validate(serializer)
-        serializer.save(**{field(self.model, 'owner'): self.request.user})  # owner can never be changed
+        serializer.save(**owner_kwargs(self.model, self.request.user))  # owner can never be changed
 
 
 def _check_numbers(model, serializer, roles, minimum=Decimal(0), strict=False):
@@ -907,7 +944,7 @@ class SaleViewSet(OwnedModelViewSet):
         requested = _parse_items(request.data.get('items'))
 
         stock_f, price_f, name_f = field(Product, 'stock'), field(Product, 'price'), field(Product, 'name')
-        total_f, owner_f = field(Sale, 'total'), field(Sale, 'owner')
+        total_f = field(Sale, 'total')
         whole_units = _internal_type(Product, stock_f) in INTEGER_TYPES
 
         data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
@@ -938,7 +975,7 @@ class SaleViewSet(OwnedModelViewSet):
             data[total_f] = as_number(total)  # trust the database, not the browser
             serializer = self.get_serializer(data=data)
             serializer.is_valid(raise_exception=True)
-            sale = serializer.save(**{owner_f: user})
+            sale = serializer.save(**owner_kwargs(Sale, user))
 
             for product_id, qty in requested.items():
                 Product.objects.filter(pk=products[product_id].pk).update(

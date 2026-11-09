@@ -69,6 +69,7 @@ DEFAULT_FROM_EMAIL = 'Duka Pooa POS <richazzerjoseph366@gmail.com>'
 
 
 MIDDLEWARE = [
+    'django.middleware.gzip.GZipMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',

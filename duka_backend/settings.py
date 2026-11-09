@@ -119,15 +119,29 @@ DATABASES = {
 # CORS Configuration - Allow Cloudflare Pages frontend
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
+    "https://duka-poa-face.vercel.app",
     "https://duka-pooa.pages.dev",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://192.168.1.12:5173",
-    "https://duka-poa-face.vercel.app",
+    
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = ['*']
-CORS_ALLOW_METHODS = ['*']
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]    
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://duka-poa-face.vercel.app",
+    "https://duka-pooa.pages.dev",
+    "https://duka-poa.onrender.com",
+]
 ROOT_URLCONF = 'duka_backend.urls'
 
 TEMPLATES = [

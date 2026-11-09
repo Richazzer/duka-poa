@@ -7,7 +7,9 @@ works with `selling_price` or `price`, `stock` or `stock_quantity`, etc.
 
 Environment variables (Render -> Environment):
     GOOGLE_CLIENT_ID          Google OAuth client id (verifies Google sign-in)
-    RESEND_API_KEY            optional, for OTP emails via Resend
+    APPS_SCRIPT_URL           Google Apps Script web app URL (free OTP emails over HTTPS)
+    APPS_SCRIPT_SECRET        Same secret you set inside the Apps Script
+    RESEND_API_KEY            optional, for OTP emails via Resend (needs a verified domain)
     RESEND_FROM               e.g. "Duka Poa <no-reply@yourdomain.com>" (verified domain)
     GEMINI_API_KEY            Gemini key for the AI agent
     GEMINI_MODEL              optional, default gemini-2.5-flash
@@ -318,9 +320,27 @@ def _new_otp(user):
     return code
 
 
+# ---------------------------------------------------------------------
+# OTP EMAIL DELIVERY
+# Order tried: 1) Google Apps Script (free, HTTPS)  2) Resend (needs a
+# verified domain)  3) Django SMTP (blocked on Render free plan).
+# The first one that succeeds wins; the rest are skipped.
+# ---------------------------------------------------------------------
+def _otp_email_html(code):
+    return (
+        "<div style='font-family:sans-serif;padding:24px;border-radius:16px;background:#f8fafc;'>"
+        "<h2 style='color:#0f172a;margin-bottom:8px;'>Duka Poa POS</h2>"
+        "<p style='color:#475569;'>Habari! Nambari yako ya siri ya uhakiki (OTP) ni:</p>"
+        f"<h1 style='color:#2563eb;letter-spacing:6px;font-size:32px;margin:16px 0;'>{code}</h1>"
+        "<p style='color:#94a3b8;font-size:12px;'>Kama hukuomba nambari hii, tafadhali puuza ujumbe huu.</p>"
+        '</div>'
+    )
+
+
 def _send_via_apps_script(email, subject, html):
-    url = os.environ.get('APPS_SCRIPT_URL')
-    secret = os.environ.get('APPS_SCRIPT_SECRET')
+    """Free: posts to a Google Apps Script web app that sends the mail through Gmail."""
+    url = os.environ.get('APPS_SCRIPT_URL', '').strip()
+    secret = os.environ.get('APPS_SCRIPT_SECRET', '').strip()
     if not url or not secret:
         return False
     payload = {'secret': secret, 'to': email, 'subject': subject, 'html': html}
@@ -334,6 +354,7 @@ def _send_via_apps_script(email, subject, html):
         with urllib.request.urlopen(req, timeout=15) as resp:
             body = resp.read().decode('utf-8').strip()
         if body == 'ok':
+            logger.info('OTP email sent via Apps Script to %s', email)
             return True
         logger.error('Apps Script email rejected: %s', body[:200])
     except Exception:
@@ -341,38 +362,53 @@ def _send_via_apps_script(email, subject, html):
     return False
 
 
+def _send_via_resend(email, subject, html):
+    resend_key = os.environ.get('RESEND_API_KEY', '').strip()
+    if not resend_key:
+        return False
+    try:
+        import resend
+
+        resend.api_key = resend_key
+        resend.Emails.send({
+            'from': os.environ.get('RESEND_FROM', 'Duka Poa POS <onboarding@resend.dev>'),
+            'to': [email],
+            'subject': subject,
+            'html': html,
+        })
+        logger.info('OTP email sent via Resend to %s', email)
+        return True
+    except Exception:
+        logger.exception('Resend OTP delivery failed')
+        return False
+
+
+def _send_via_smtp(email, subject, text):
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
+    if not from_email:
+        logger.error('No sender configured (DEFAULT_FROM_EMAIL); SMTP OTP email not sent')
+        return False
+    try:
+        send_mail(subject, text, from_email, [email], fail_silently=False)
+        logger.info('OTP email sent via SMTP to %s', email)
+        return True
+    except Exception:
+        logger.exception('SMTP OTP delivery failed')
+        return False
+
+
 def _send_otp_email_sync(email, code):
     subject = 'Nambari yako ya Uhakiki (OTP) - Duka Poa POS'
     text = f'Habari! Nambari yako ya siri ya uhakiki (OTP) ya Duka Poa ni: {code}'
+    html = _otp_email_html(code)
 
-    resend_key = os.environ.get('RESEND_API_KEY')
-    if resend_key:
-        try:
-            import resend
-
-            resend.api_key = resend_key
-            resend.Emails.send({
-                'from': os.environ.get('RESEND_FROM', 'Duka Poa POS <onboarding@resend.dev>'),
-                'to': [email],
-                'subject': subject,
-                html = (
-                    "<div style='font-family:sans-serif;padding:24px'>"
-                    "<h2>Duka Poa POS</h2><p>Nambari yako ya OTP ni:</p>"
-                    f"<h1 style='letter-spacing:6px;color:#2563eb'>{code}</h1></div>"
-                )
-                if _send_via_apps_script(email, subject, html):
-                     return
-        except Exception:
-            logger.exception('Resend OTP delivery failed, trying SMTP')
-
-    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None)
-    if not from_email:
-        logger.error('No sender configured (RESEND_FROM / DEFAULT_FROM_EMAIL); OTP email not sent')
+    if _send_via_apps_script(email, subject, html):
         return
-    try:
-        send_mail(subject, text, from_email, [email], fail_silently=False)
-    except Exception:
-        logger.exception('SMTP OTP delivery failed')
+    if _send_via_resend(email, subject, html):
+        return
+    if _send_via_smtp(email, subject, text):
+        return
+    logger.error('All OTP email channels failed for %s', email)
 
 
 def _send_otp_email(email, code):

@@ -33,7 +33,12 @@ from .economics import calculate_business_metrics
 # AUTHENTICATION VIEWS
 # =====================================================================
 
+# =====================================================================
+# 1. SIGN IN (NO OTP - DIRECT ENTRY TO DASHBOARD)
+# =====================================================================
+
 @api_view(['POST'])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def login_view(request):
     raw_identifier = request.data.get('email') or request.data.get('username')
@@ -43,35 +48,31 @@ def login_view(request):
         return Response({'error': 'Barua pepe na nenosiri vinahitajika.'}, status=status.HTTP_400_BAD_REQUEST)
 
     identifier = raw_identifier.strip()
-    print(f"\n🔍 [LOGIN ATTEMPT] Email/Username: '{identifier}' | Password received: {bool(password)}", flush=True)
+    print(f"\n🔑 [LOGIN ATTEMPT] User: '{identifier}'", flush=True)
 
-    # 1. Search for user by email (case-insensitive) or username
+    # Search user by email or username
     user_obj = User.objects.filter(email__iexact=identifier).first()
     if not user_obj:
         user_obj = User.objects.filter(username__iexact=identifier).first()
 
     if not user_obj:
-        print(f"❌ [LOGIN ERROR] Hakuna mtumiaji mwenye barua pepe hii: {identifier}", flush=True)
         return Response({'error': 'Akaunti hii haipo. Tafadhali jisajili kwanza.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # 2. Check if password is set on user
+    # If user registered with Google and has no password, set the password they typed
     if not user_obj.has_usable_password():
-        print(f"⚠️ [LOGIN WARNING] Mtumiaji {identifier} hana nenosiri! Tunaweka nenosiri hili jipya...", flush=True)
         user_obj.set_password(password)
         user_obj.save()
 
-    # 3. Authenticate using direct password verification
+    # Direct password check
     is_valid = user_obj.check_password(password)
-    print(f"🔑 [LOGIN VERIFICATION] Password Match: {is_valid}", flush=True)
-
     if not is_valid:
-        return Response({'error': 'Barua pepe au nenosiri si sahihi.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Nenosiri au barua pepe si sahihi.'}, status=status.HTTP_400_BAD_REQUEST)
 
     user = user_obj
     profile, _ = BusinessProfile.objects.get_or_create(user=user)
     refresh = RefreshToken.for_user(user)
 
-    print(f"✅ [LOGIN SUCCESS] User {user.email} logged in successfully! is_onboarded: {profile.is_onboarded}\n", flush=True)
+    print(f"✅ [LOGIN SUCCESSFUL] User {user.email} logged in directly without OTP!", flush=True)
 
     return Response({
         'message': 'Umeingia kwa mafanikio!',
@@ -86,51 +87,131 @@ def login_view(request):
     }, status=status.HTTP_200_OK)
 
 
+# =====================================================================
+# 2. SIGN UP: SEND OTP (RESILIENT EMAIL SENDER)
+# =====================================================================
+
 @api_view(['POST'])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def send_email_otp(request):
     """
-    Generates OTP, logs it to server console (visible in Render logs),
-    and sends real email via Gmail SMTP.
+    Generates OTP for Sign-Up. Sends via Gmail SMTP and ALWAYS logs to Render console.
     """
     email = (request.data.get('email') or '').strip()
     if not email:
         return Response({'error': 'Barua pepe inahitajika'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # 1. Get or create user
     user = User.objects.filter(email__iexact=email).first()
     if not user:
         user = User.objects.create(username=email, email=email)
         user.set_unusable_password()
         user.save()
 
-    # 2. Generate and save OTP
+    # Create fresh OTP record
     otp_code = EmailOTP.generate_otp()
     EmailOTP.objects.create(user=user, otp=otp_code)
 
-    # 3. Always print to Render logs so you can see it in Render dashboard
+    # 💥 ALWAYS PRINT IN RENDER LOGS SO YOU NEVER MISS IT 💥
     print("\n" + "=" * 50, flush=True)
     print(f"🔥 [DUKA POOA LIVE OTP]", flush=True)
     print(f"📩 EMAIL: {email}", flush=True)
     print(f"🔑 CODE : >>> {otp_code} <<<", flush=True)
     print("=" * 50 + "\n", flush=True)
 
-    # 4. Send email safely without crashing the API
+    # Send email via SMTP safely
     subject = "Nambari yako ya Uhakiki (OTP) - Duka Pooa POS"
-    message = f"Habari! Nambari yako ya siri ya uhakiki (OTP) ni: {otp_code}"
+    message = f"Habari! Nambari yako ya siri ya uhakiki (OTP) ya Duka Poa ni: {otp_code}"
     
     try:
         from django.conf import settings
         from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or settings.EMAIL_HOST_USER
         send_mail(subject, message, from_email, [email], fail_silently=False)
-        return Response({'message': 'OTP imetumwa kikamilifu!'}, status=status.HTTP_200_OK)
+        return Response({'message': 'OTP imetumwa kikamilifu kwenye barua pepe yako!'}, status=status.HTTP_200_OK)
     except Exception as e:
-        print(f"⚠️ [SMTP WARNING]: Could not deliver email directly: {e}", flush=True)
-        # Still return 200 so registration can continue (the code is saved in DB and printed in Render logs)
+        print(f"⚠️ [SMTP NOTICE]: {e}", flush=True)
+        # Never crash the user: return 200 so registration continues smoothly
         return Response({
-            'message': 'OTP imetengenezwa kikamilifu.',
-            'note': 'Kama hujaiona kwenye inbox, angalia spam au Render logs.'
+            'message': 'Nambari ya OTP imetengenezwa.',
+            'note': 'Kama hujaiona kwenye inbox, angalia spam au Render server logs.'
         }, status=status.HTTP_200_OK)
+
+
+# =====================================================================
+# 3. GOOGLE AUTH (DIRECT LOGIN OR SIGNUP WITH OTP)
+# =====================================================================
+
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def google_auth_view(request):
+    credential = request.data.get('credential')
+    mode = request.data.get('mode', 'login') # 'login' or 'signup'
+
+    if not credential:
+        return Response({'error': 'Token ya Google inahitajika.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        import urllib.request
+        google_url = f"https://oauth2.googleapis.com/tokeninfo?id_token={credential}"
+        req = urllib.request.Request(google_url)
+        with urllib.request.urlopen(req) as resp:
+            google_data = json.loads(resp.read().decode('utf-8'))
+
+        email = google_data.get('email')
+        if not email:
+            return Response({'error': 'Barua pepe haijapatikana kutoka Google.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            user = User.objects.create(username=email, email=email)
+            user.set_unusable_password()
+            user.save()
+
+        # IF SIGNING UP: Generate and send OTP to this Google email!
+        if mode == 'signup':
+            otp_code = EmailOTP.generate_otp()
+            EmailOTP.objects.create(user=user, otp=otp_code)
+
+            print("\n" + "=" * 50, flush=True)
+            print(f"🔥 [GOOGLE SIGN-UP OTP]", flush=True)
+            print(f"📩 GOOGLE EMAIL: {email}", flush=True)
+            print(f"🔑 OTP CODE    : >>> {otp_code} <<<", flush=True)
+            print("=" * 50 + "\n", flush=True)
+
+            try:
+                from django.conf import settings
+                from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or settings.EMAIL_HOST_USER
+                send_mail("Nambari ya Uhakiki (OTP) - Google Sign Up", f"Nambari yako ya OTP ni: {otp_code}", from_email, [email], fail_silently=True)
+            except Exception:
+                pass
+
+            return Response({
+                'requires_otp': True,
+                'email': email,
+                'message': 'OTP imetumwa kwenye barua pepe yako ya Google.'
+            }, status=status.HTTP_200_OK)
+
+        # IF LOGGING IN: No OTP! Direct entry to dashboard
+        profile, _ = BusinessProfile.objects.get_or_create(user=user)
+        refresh = RefreshToken.for_user(user)
+
+        return Response({
+            'requires_otp': False,
+            'message': 'Umeingia kwa Google kwa mafanikio!',
+            'access_token': str(refresh.access_token),
+            'refresh_token': str(refresh),
+            'is_onboarded': profile.is_onboarded,
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'is_onboarded': profile.is_onboarded,
+            }
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print(f"❌ [GOOGLE ERROR]: {e}", flush=True)
+        return Response({'error': 'Imeshindikana kuthibitisha akaunti ya Google.'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])
@@ -849,57 +930,6 @@ def gemini_ai_assistant_view(request):
     }, status=status.HTTP_200_OK)
     
     
-    
-
-
-@api_view(['POST'])
-@authentication_classes([])
-@permission_classes([AllowAny])
-def google_auth_view(request):
-    """
-    Verifies Google ID token directly with Google and issues JWT tokens.
-    """
-    credential = request.data.get('credential')
-    if not credential:
-        return Response({'error': 'Token ya Google inahitajika.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    try:
-        # Verify token directly with Google's servers
-        google_verify_url = f"https://oauth2.googleapis.com/tokeninfo?id_token={credential}"
-        req = urllib.request.Request(google_verify_url)
-        with urllib.request.urlopen(req) as resp:
-            google_data = json.loads(resp.read().decode('utf-8'))
-
-        email = google_data.get('email')
-        if not email:
-            return Response({'error': 'Barua pepe haijapatikana kutoka Google.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Get or create user
-        user = User.objects.filter(email__iexact=email).first()
-        if not user:
-            user = User.objects.create(username=email, email=email)
-            user.set_unusable_password()
-            user.save()
-
-        profile, _ = BusinessProfile.objects.get_or_create(user=user)
-        refresh = RefreshToken.for_user(user)
-
-        return Response({
-            'message': 'Umeingia kwa Google kwa mafanikio!',
-            'access_token': str(refresh.access_token),
-            'refresh_token': str(refresh),
-            'is_onboarded': profile.is_onboarded,
-            'user': {
-                'id': user.id,
-                'email': user.email,
-                'is_onboarded': profile.is_onboarded,
-            }
-        }, status=status.HTTP_200_OK)
-
-    except Exception as e:
-        print(f"❌ [GOOGLE AUTH ERROR]: {e}", flush=True)
-        return Response({'error': 'Imeshindikana kuthibitisha akaunti ya Google.'}, status=status.HTTP_400_BAD_REQUEST)
-
 
 
 @api_view(['GET'])

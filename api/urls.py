@@ -39,7 +39,7 @@ urlpatterns = [
     # Economics & Analytics
     path('analytics/economics/', business_analytics_view, name='business-economics'),
     
-    path('ai/chat/',  ai_chat_view, name='ai-chat'),
+    path('ai/chat/', ai_chat_view, name='ai-chat'),
     path('ai/apply/', ai_apply_view, name='ai-apply'),
     # Auth Endpoints
     

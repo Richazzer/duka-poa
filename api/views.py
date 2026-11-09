@@ -343,7 +343,7 @@ def _send_via_apps_script(email, subject, html):
     secret = os.environ.get('APPS_SCRIPT_SECRET', '').strip()
     if not url or not secret:
         logger.error('Apps Script not configured: set APPS_SCRIPT_URL and APPS_SCRIPT_SECRET in Render')
-        return Falsee
+        return False
     payload = {'secret': secret, 'to': email, 'subject': subject, 'html': html}
     req = urllib.request.Request(
         url,

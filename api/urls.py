@@ -17,7 +17,7 @@ from .views import (
     google_auth_view,
     health_check
 )
-from .ai_views import ai_chat_view, ai_apply_view
+from .views import ai_chat_view, ai_apply_view
 router = DefaultRouter()
 router.register(r'products', ProductViewSet)
 router.register(r'sales', SaleViewSet)

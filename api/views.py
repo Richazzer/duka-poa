@@ -91,51 +91,66 @@ def login_view(request):
 # 2. SIGN UP: SEND OTP (RESILIENT EMAIL SENDER)
 # =====================================================================
 
+
 @api_view(['POST'])
 @authentication_classes([])
 @permission_classes([AllowAny])
 def send_email_otp(request):
     """
-    Generates OTP for Sign-Up. Sends via Gmail SMTP and ALWAYS logs to Render console.
+    Bulletproof OTP generator. Sends email via SMTP safely (fail_silently=True)
+    and logs OTP directly to Render console so you never get locked out.
     """
-    email = (request.data.get('email') or '').strip()
+    raw_email = request.data.get('email', '')
+    email = str(raw_email).strip().lower()
+
     if not email:
         return Response({'error': 'Barua pepe inahitajika'}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = User.objects.filter(email__iexact=email).first()
+    # 1. Safe user lookup (checks both email and username safely)
+    user = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email)).first()
     if not user:
-        user = User.objects.create(username=email, email=email)
-        user.set_unusable_password()
-        user.save()
+        try:
+            user = User.objects.create(username=email, email=email)
+            user.set_unusable_password()
+            user.save()
+        except Exception:
+            # If username collision occurs, reuse the existing user
+            user = User.objects.filter(username__iexact=email).first()
 
-    # Create fresh OTP record
+    if not user:
+        return Response({'error': 'Hitilafu ya kuunda akaunti. Jaribu tena.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # 2. Generate and save OTP record
     otp_code = EmailOTP.generate_otp()
     EmailOTP.objects.create(user=user, otp=otp_code)
 
-    # 💥 ALWAYS PRINT IN RENDER LOGS SO YOU NEVER MISS IT 💥
+    # 3. ALWAYS PRINT TO RENDER LOGS (Visible in Render Dashboard -> Logs)
     print("\n" + "=" * 50, flush=True)
     print(f"🔥 [DUKA POOA LIVE OTP]", flush=True)
-    print(f"📩 EMAIL: {email}", flush=True)
-    print(f"🔑 CODE : >>> {otp_code} <<<", flush=True)
+    print(f"📩 USER EMAIL: {email}", flush=True)
+    print(f"🔑 OTP CODE  : >>> {otp_code} <<<", flush=True)
     print("=" * 50 + "\n", flush=True)
 
-    # Send email via SMTP safely
+    # 4. Send email safely via Gmail SMTP (fail_silently=True prevents 500 crashes)
     subject = "Nambari yako ya Uhakiki (OTP) - Duka Pooa POS"
-    message = f"Habari! Nambari yako ya siri ya uhakiki (OTP) ya Duka Poa ni: {otp_code}"
+    message = f"Habari! Nambari yako ya siri ya uhakiki (OTP) ni: {otp_code}"
     
     try:
         from django.conf import settings
-        from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or settings.EMAIL_HOST_USER
-        send_mail(subject, message, from_email, [email], fail_silently=False)
-        return Response({'message': 'OTP imetumwa kikamilifu kwenye barua pepe yako!'}, status=status.HTTP_200_OK)
-    except Exception as e:
-        print(f"⚠️ [SMTP NOTICE]: {e}", flush=True)
-        # Never crash the user: return 200 so registration continues smoothly
-        return Response({
-            'message': 'Nambari ya OTP imetengenezwa.',
-            'note': 'Kama hujaiona kwenye inbox, angalia spam au Render server logs.'
-        }, status=status.HTTP_200_OK)
+        # Use actual Gmail address as sender so Gmail SMTP doesn't reject it
+        sender_email = getattr(settings, 'EMAIL_HOST_USER', None) or 'richazzerjoseph366@gmail.com'
+        from_email = f"Duka Pooa POS <{sender_email}>"
+        
+        send_mail(subject, message, from_email, [email], fail_silently=True)
+    except Exception as smtp_err:
+        print(f"⚠️ [SMTP WARNING]: {smtp_err}", flush=True)
 
+    # Always return 200 success with clear feedback
+    return Response({
+        'success': True,
+        'message': 'OTP imetengenezwa kikamilifu.',
+        'email': email
+    }, status=status.HTTP_200_OK)
 
 # =====================================================================
 # 3. GOOGLE AUTH (DIRECT LOGIN OR SIGNUP WITH OTP)

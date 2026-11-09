@@ -63,6 +63,7 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
+EMAIL_TIMEOUT = 5  # Aborts if Gmail takes more than 5 seconds
 EMAIL_HOST_USER = 'richazzerjoseph366@gmail.com'
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', 'mezz fzfs wtho pncp')
 DEFAULT_FROM_EMAIL = 'Duka Pooa POS <richazzerjoseph366@gmail.com>'

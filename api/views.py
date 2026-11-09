@@ -318,6 +318,29 @@ def _new_otp(user):
     return code
 
 
+def _send_via_apps_script(email, subject, html):
+    url = os.environ.get('APPS_SCRIPT_URL')
+    secret = os.environ.get('APPS_SCRIPT_SECRET')
+    if not url or not secret:
+        return False
+    payload = {'secret': secret, 'to': email, 'subject': subject, 'html': html}
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = resp.read().decode('utf-8').strip()
+        if body == 'ok':
+            return True
+        logger.error('Apps Script email rejected: %s', body[:200])
+    except Exception:
+        logger.exception('Apps Script OTP delivery failed')
+    return False
+
+
 def _send_otp_email_sync(email, code):
     subject = 'Nambari yako ya Uhakiki (OTP) - Duka Poa POS'
     text = f'Habari! Nambari yako ya siri ya uhakiki (OTP) ya Duka Poa ni: {code}'
@@ -332,16 +355,13 @@ def _send_otp_email_sync(email, code):
                 'from': os.environ.get('RESEND_FROM', 'Duka Poa POS <onboarding@resend.dev>'),
                 'to': [email],
                 'subject': subject,
-                'html': (
-                    "<div style='font-family:sans-serif;padding:24px;border-radius:16px;background:#f8fafc;'>"
-                    "<h2 style='color:#0f172a;margin-bottom:8px;'>Duka Poa POS</h2>"
-                    "<p style='color:#475569;'>Habari! Nambari yako ya siri ya uhakiki (OTP) ni:</p>"
-                    f"<h1 style='color:#2563eb;letter-spacing:6px;font-size:32px;margin:16px 0;'>{code}</h1>"
-                    "<p style='color:#94a3b8;font-size:12px;'>Kama hukuomba nambari hii, tafadhali puuza ujumbe huu.</p>"
-                    '</div>'
-                ),
-            })
-            return
+                html = (
+                    "<div style='font-family:sans-serif;padding:24px'>"
+                    "<h2>Duka Poa POS</h2><p>Nambari yako ya OTP ni:</p>"
+                    f"<h1 style='letter-spacing:6px;color:#2563eb'>{code}</h1></div>"
+                )
+                if _send_via_apps_script(email, subject, html):
+                     return
         except Exception:
             logger.exception('Resend OTP delivery failed, trying SMTP')
 

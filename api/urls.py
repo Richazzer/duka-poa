@@ -14,7 +14,8 @@ from .views import (
     CustomerDebtViewSet,
     expenses_view,
     gemini_ai_assistant_view,
-    google_auth_view
+    google_auth_view,
+    health_check
 )
 
 router = DefaultRouter()
@@ -23,6 +24,8 @@ router.register(r'sales', SaleViewSet)
 router.register(r'debts', CustomerDebtViewSet)
 
 urlpatterns = [
+    path('health/', health_check, name='health-check'),
+    
     path('', include(router.urls)),
     path('expenses/', expenses_view, name='expenses'), 
     path('ocr/scan/', ocr_invoice_scanner_view, name='ocr-scan'),

@@ -90,33 +90,47 @@ def login_view(request):
 @permission_classes([AllowAny])
 def send_email_otp(request):
     """
-    Generates and immediately prints OTP code to terminal with flush=True.
+    Generates OTP, logs it to server console (visible in Render logs),
+    and sends real email via Gmail SMTP.
     """
-    email = request.data.get('email')
+    email = (request.data.get('email') or '').strip()
     if not email:
         return Response({'error': 'Barua pepe inahitajika'}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = User.objects.filter(email=email).first()
+    # 1. Get or create user
+    user = User.objects.filter(email__iexact=email).first()
     if not user:
         user = User.objects.create(username=email, email=email)
-    
+        user.set_unusable_password()
+        user.save()
+
+    # 2. Generate and save OTP
     otp_code = EmailOTP.generate_otp()
     EmailOTP.objects.create(user=user, otp=otp_code)
 
+    # 3. Always print to Render logs so you can see it in Render dashboard
     print("\n" + "=" * 50, flush=True)
-    print(f"🔥 [DUKA POOA OTP VERIFICATION]", flush=True)
+    print(f"🔥 [DUKA POOA LIVE OTP]", flush=True)
     print(f"📩 EMAIL: {email}", flush=True)
     print(f"🔑 CODE : >>> {otp_code} <<<", flush=True)
     print("=" * 50 + "\n", flush=True)
 
+    # 4. Send email safely without crashing the API
     subject = "Nambari yako ya Uhakiki (OTP) - Duka Pooa POS"
-    message = f"Nambari yako ya siri ya uhakiki (OTP) ni: {otp_code}"
+    message = f"Habari! Nambari yako ya siri ya uhakiki (OTP) ni: {otp_code}"
     
     try:
-        send_mail(subject, message, None, [email], fail_silently=True)
+        from django.conf import settings
+        from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or settings.EMAIL_HOST_USER
+        send_mail(subject, message, from_email, [email], fail_silently=False)
         return Response({'message': 'OTP imetumwa kikamilifu!'}, status=status.HTTP_200_OK)
     except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        print(f"⚠️ [SMTP WARNING]: Could not deliver email directly: {e}", flush=True)
+        # Still return 200 so registration can continue (the code is saved in DB and printed in Render logs)
+        return Response({
+            'message': 'OTP imetengenezwa kikamilifu.',
+            'note': 'Kama hujaiona kwenye inbox, angalia spam au Render logs.'
+        }, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])

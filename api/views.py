@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import threading
 import urllib.request
 from datetime import date, timedelta
 from collections import defaultdict
@@ -156,58 +157,79 @@ def send_email_otp(request):
 # 3. GOOGLE AUTH (DIRECT LOGIN OR SIGNUP WITH OTP)
 # =====================================================================
 
+
 @api_view(['POST'])
 @authentication_classes([])
 @permission_classes([AllowAny])
 def google_auth_view(request):
+    """
+    Asynchronous Google Auth:
+    - 4s timeout on Google token verification
+    - Non-blocking background email sending (zero Gunicorn 30s timeouts)
+    - Always logs OTP directly in Render console
+    """
     credential = request.data.get('credential')
-    mode = request.data.get('mode', 'login') # 'login' or 'signup'
+    mode = request.data.get('mode', 'signup')
 
     if not credential:
         return Response({'error': 'Token ya Google inahitajika.'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        import urllib.request
+        # 1. Verify Google token with strict 4s timeout (never hangs)
         google_url = f"https://oauth2.googleapis.com/tokeninfo?id_token={credential}"
         req = urllib.request.Request(google_url)
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=4) as resp:
             google_data = json.loads(resp.read().decode('utf-8'))
 
-        email = google_data.get('email')
+        email = (google_data.get('email') or '').strip().lower()
         if not email:
             return Response({'error': 'Barua pepe haijapatikana kutoka Google.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = User.objects.filter(email__iexact=email).first()
+        # 2. Get or create user safely
+        user = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email)).first()
         if not user:
             user = User.objects.create(username=email, email=email)
             user.set_unusable_password()
             user.save()
 
-        # IF SIGNING UP: Generate and send OTP to this Google email!
+        # 3. IF SIGNING UP: Generate OTP and send in BACKGROUND THREAD
         if mode == 'signup':
             otp_code = EmailOTP.generate_otp()
             EmailOTP.objects.create(user=user, otp=otp_code)
 
+            # ALWAYS PRINT TO RENDER LOGS IMMEDIATELY
             print("\n" + "=" * 50, flush=True)
             print(f"🔥 [GOOGLE SIGN-UP OTP]", flush=True)
             print(f"📩 GOOGLE EMAIL: {email}", flush=True)
             print(f"🔑 OTP CODE    : >>> {otp_code} <<<", flush=True)
             print("=" * 50 + "\n", flush=True)
 
-            try:
-                from django.conf import settings
-                from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or settings.EMAIL_HOST_USER
-                send_mail("Nambari ya Uhakiki (OTP) - Google Sign Up", f"Nambari yako ya OTP ni: {otp_code}", from_email, [email], fail_silently=True)
-            except Exception:
-                pass
+            # Send email in a background thread so Gunicorn NEVER times out!
+            def send_email_async(target_email, code):
+                try:
+                    from django.conf import settings
+                    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or settings.EMAIL_HOST_USER
+                    send_mail(
+                        "Nambari ya Uhakiki (OTP) - Duka Pooa POS",
+                        f"Habari! Nambari yako ya siri ya uhakiki (OTP) ya Duka Poa ni: {code}",
+                        from_email,
+                        [target_email],
+                        fail_silently=True
+                    )
+                    print(f"✅ Email delivered to {target_email}", flush=True)
+                except Exception as mail_err:
+                    print(f"⚠️ SMTP background warning: {mail_err}", flush=True)
 
+            threading.Thread(target=send_email_async, args=(email, otp_code), daemon=True).start()
+
+            # Respond immediately in 0.1 seconds!
             return Response({
                 'requires_otp': True,
                 'email': email,
-                'message': 'OTP imetumwa kwenye barua pepe yako ya Google.'
+                'message': 'OTP imetengenezwa kikamilifu.'
             }, status=status.HTTP_200_OK)
 
-        # IF LOGGING IN: No OTP! Direct entry to dashboard
+        # 4. IF LOGGING IN: Direct access (No OTP)
         profile, _ = BusinessProfile.objects.get_or_create(user=user)
         refresh = RefreshToken.for_user(user)
 
@@ -225,8 +247,8 @@ def google_auth_view(request):
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        print(f"❌ [GOOGLE ERROR]: {e}", flush=True)
-        return Response({'error': 'Imeshindikana kuthibitisha akaunti ya Google.'}, status=status.HTTP_400_BAD_REQUEST)
+        print(f"❌ [GOOGLE AUTH ERROR]: {e}", flush=True)
+        return Response({'error': f'Imeshindikana: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])

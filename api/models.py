@@ -8,36 +8,31 @@ import datetime
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
+from django.conf import settings
+
 class Product(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='products', null=True, blank=True)
     name = models.CharField(max_length=255)
-    category = models.CharField(max_length=100)
-    price = models.DecimalField(max_digits=12, decimal_places=2)
+    category = models.CharField(max_length=100, default='Duka')
+    price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     stock = models.IntegerField(default=0)
-    image = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
-        return f"{self.name} (TZS {self.price})"
-
 class Sale(models.Model):
-    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
-    payment_method = models.CharField(max_length=50, default='Cash') # Cash, Card, Mobile Money
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sales', null=True, blank=True)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payment_method = models.CharField(max_length=50, default='Cash')
     customer_name = models.CharField(max_length=255, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
-        return f"Sale #{self.id} - TZS {self.total_amount}"
-
 class CustomerDebt(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='debts', null=True, blank=True)
     customer_name = models.CharField(max_length=255)
+    amount_owed = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     phone = models.CharField(max_length=20, blank=True, null=True)
-    amount_owed = models.DecimalField(max_digits=12, decimal_places=2)
-    status = models.CharField(max_length=50, default='Pending') # Pending, Paid
-    due_date = models.DateField(blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
+    is_paid = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.customer_name} owes TZS {self.amount_owed}"
     
 class EmailOTP(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)

@@ -1,54 +1,48 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenRefreshView, TokenBlacklistView
 
 from .views import (
+    health_check,
     register_view,
     login_view,
-    send_email_otp,
-    verify_email_otp,
+    google_auth_view,
     CompleteOnboardingView,
     business_analytics_view,
-    ocr_invoice_scanner_view,
     ProductViewSet,
     SaleViewSet,
     CustomerDebtViewSet,
     expenses_view,
-    gemini_ai_assistant_view,
-    google_auth_view,
-    health_check
+    ocr_invoice_scanner_view,
+    ai_chat_view,
 )
-from .views import ai_chat_view, ai_apply_view
+
 router = DefaultRouter()
-router.register(r'products', ProductViewSet)
-router.register(r'sales', SaleViewSet)
-router.register(r'debts', CustomerDebtViewSet)
+router.register(r'products', ProductViewSet, basename='product')
+router.register(r'sales', SaleViewSet, basename='sale')
+router.register(r'debts', CustomerDebtViewSet, basename='debt')
 
 urlpatterns = [
-    path('', include(router.urls)),
-    path('auth/register/', register_view, name='register'),
+    # Health Check for UptimeRobot / Cron-Job
     path('health/', health_check, name='health-check'),
-    path('auth/google/', google_auth_view, name='google-auth'),
-    
-    p
+
+    # Direct Authentication (No OTP delays)
+    path('auth/register/', register_view, name='register'),
     path('auth/login/', login_view, name='login'),
-   
-    path('expenses/', expenses_view, name='expenses'), 
-    path('ocr/scan/', ocr_invoice_scanner_view, name='ocr-scan'),
-    
-    
-    
-    # Economics & Analytics
-    path('analytics/economics/', business_analytics_view, name='business-economics'),
-    
-    path('ai/chat/', ai_chat_view, name='ai-chat'),
-    path('ai/apply/', ai_apply_view, name='ai-apply'),
-    # Auth Endpoints
-    
-   
-    path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('auth/logout/', TokenBlacklistView.as_view(), name='token_blacklist'),
-    
+    path('auth/google/', google_auth_view, name='google-auth'),
+
     # Onboarding
     path('onboarding/', CompleteOnboardingView.as_view(), name='complete-onboarding'),
+
+    # Real Analytics & Economics
+    path('analytics/economics/', business_analytics_view, name='business-economics'),
+
+    # AI Business Agent
+    path('ai/chat/', ai_chat_view, name='ai-chat'),
+
+    # Core Router (products, sales, debts)
+    path('', include(router.urls)),
+
+    # Extras
+    path('expenses/', expenses_view, name='expenses'),
+    path('ocr/scan/', ocr_invoice_scanner_view, name='ocr-scan'),
 ]

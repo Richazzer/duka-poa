@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView, TokenBlacklistView
 
 from .views import (
+    register_view,
     login_view,
     send_email_otp,
     verify_email_otp,
@@ -25,10 +26,11 @@ router.register(r'debts', CustomerDebtViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('auth/register/', register_view, name='register'),
     path('health/', health_check, name='health-check'),
     path('auth/google/', google_auth_view, name='google-auth'),
-    path('auth/send-otp/', send_email_otp, name='send-otp'),
-    path('auth/verify-otp/', verify_email_otp, name='verify-otp'),
+    
+    p
     path('auth/login/', login_view, name='login'),
    
     path('expenses/', expenses_view, name='expenses'), 

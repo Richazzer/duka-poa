@@ -1,5 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+
 from .views import (
     health_check,
     register_view,
@@ -32,7 +33,7 @@ urlpatterns = [
     path('onboarding/', CompleteOnboardingView.as_view(), name='complete-onboarding'),
     path('analytics/economics/', business_analytics_view, name='business-economics'),
     path('ai/chat/', gemini_ai_assistant_view, name='ai-chat'),
+    path('', include(router.urls)),
     path('expenses/', expenses_view, name='expenses'),
     path('ocr/scan/', ocr_invoice_scanner_view, name='ocr-scan'),
-    path('', include(router.urls)),
 ]

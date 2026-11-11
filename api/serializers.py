@@ -2,9 +2,6 @@ from rest_framework import serializers
 from .models import Product, Sale, CustomerDebt, BusinessProfile
 
 class ProductSerializer(serializers.ModelSerializer):
-    selling_price = serializers.DecimalField(source='price', max_digits=12, decimal_places=2, required=False)
-    stock_quantity = serializers.IntegerField(source='stock', required=False)
-
     class Meta:
         model = Product
         fields = '__all__'
@@ -17,8 +14,6 @@ class SaleSerializer(serializers.ModelSerializer):
 
 
 class CustomerDebtSerializer(serializers.ModelSerializer):
-    amount = serializers.DecimalField(source='amount_owed', max_digits=12, decimal_places=2, required=False)
-
     class Meta:
         model = CustomerDebt
         fields = '__all__'

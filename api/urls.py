@@ -1,48 +1,30 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
+from rest_framework import serializers
+from .models import Product, Sale, CustomerDebt, BusinessProfile
 
-from .views import (
-    health_check,
-    register_view,
-    login_view,
-    google_auth_view,
-    CompleteOnboardingView,
-    business_analytics_view,
-    ProductViewSet,
-    SaleViewSet,
-    CustomerDebtViewSet,
-    expenses_view,
-    ocr_invoice_scanner_view,
-    ai_chat_view,
-)
+class ProductSerializer(serializers.ModelSerializer):
+    selling_price = serializers.DecimalField(source='price', max_digits=12, decimal_places=2, required=False)
+    stock_quantity = serializers.IntegerField(source='stock', required=False)
 
-router = DefaultRouter()
-router.register(r'products', ProductViewSet, basename='product')
-router.register(r'sales', SaleViewSet, basename='sale')
-router.register(r'debts', CustomerDebtViewSet, basename='debt')
+    class Meta:
+        model = Product
+        fields = '__all__'
 
-urlpatterns = [
-    # Health Check for UptimeRobot / Cron-Job
-    path('health/', health_check, name='health-check'),
 
-    # Direct Authentication (No OTP delays)
-    path('auth/register/', register_view, name='register'),
-    path('auth/login/', login_view, name='login'),
-    path('auth/google/', google_auth_view, name='google-auth'),
+class SaleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sale
+        fields = '__all__'
 
-    # Onboarding
-    path('onboarding/', CompleteOnboardingView.as_view(), name='complete-onboarding'),
 
-    # Real Analytics & Economics
-    path('analytics/economics/', business_analytics_view, name='business-economics'),
+class CustomerDebtSerializer(serializers.ModelSerializer):
+    amount = serializers.DecimalField(source='amount_owed', max_digits=12, decimal_places=2, required=False)
 
-    # AI Business Agent
-    path('ai/chat/', ai_chat_view, name='ai-chat'),
+    class Meta:
+        model = CustomerDebt
+        fields = '__all__'
 
-    # Core Router (products, sales, debts)
-    path('', include(router.urls)),
 
-    # Extras
-    path('expenses/', expenses_view, name='expenses'),
-    path('ocr/scan/', ocr_invoice_scanner_view, name='ocr-scan'),
-]
+class BusinessOnboardingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BusinessProfile
+        fields = '__all__'

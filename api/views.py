@@ -452,7 +452,8 @@ class OwnedModelViewSet(viewsets.ModelViewSet):
 
 # =====================================================================
 # PRODUCT, SALE & DEBT VIEWSETS (MATCHES EXACT RENDER POSTGRES COLUMNS)
-# =====================================================================
+# ==============================================================
+
 
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by('-id')
@@ -463,6 +464,12 @@ class ProductViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         try:
             qs = Product.objects.all().order_by('-id')
+            # Separate products per logged-in user
+            if request.user and request.user.is_authenticated:
+                user_qs = qs.filter(user=request.user)
+                if user_qs.exists() or not qs.filter(user__isnull=True).exists():
+                    qs = user_qs
+
             data = []
             for p in qs:
                 data.append({
@@ -480,7 +487,6 @@ class ProductViewSet(viewsets.ModelViewSet):
             return Response([], status=status.HTTP_200_OK)
 
     def create(self, request, *args, **kwargs):
-        print(f"\n📦 [CREATE PRODUCT ATTEMPT] Data: {request.data}", flush=True)
         try:
             name = str(request.data.get('name', '')).strip()
             category = str(request.data.get('category', 'Duka')).strip() or 'Duka'
@@ -490,14 +496,17 @@ class ProductViewSet(viewsets.ModelViewSet):
             if not name:
                 return Response({'error': 'Jina la bidhaa linahitajika.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # 💥 ONLY INSERT COLUMNS THAT ACTUALLY EXIST IN POSTGRES (NO user_id!) 💥
+            # Assign logged-in user if available
+            user = request.user if (request.user and request.user.is_authenticated) else None
+
             product = Product.objects.create(
+                user=user,
                 name=name,
                 category=category,
                 price=price,
                 stock=stock
             )
-            print(f"✅ [PRODUCT CREATED SUCCESSFULLY] ID: {product.id}, Name: {product.name}", flush=True)
+            print(f"✅ [PRODUCT CREATED] ID: {product.id}, Name: {product.name}", flush=True)
 
             return Response({
                 'id': product.id,
@@ -510,54 +519,8 @@ class ProductViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            import traceback
-            traceback.print_exc()
             print(f"❌ [PRODUCT CREATE ERROR]: {e}", flush=True)
             return Response({'error': f'Hitilafu ya kuunda bidhaa: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
-
-
-class SaleViewSet(viewsets.ModelViewSet):
-    queryset = Sale.objects.all().order_by('-id')
-    serializer_class = SaleSerializer
-    permission_classes = [AllowAny]
-    authentication_classes = []
-
-    def create(self, request, *args, **kwargs):
-        try:
-            total = float(request.data.get('total_amount') or request.data.get('amount') or 0)
-            method = request.data.get('payment_method', 'Cash')
-            customer = request.data.get('customer_name', 'Mteja wa Kawaida')
-            items = request.data.get('items', [])
-
-            # Create sale without non-existent user_id
-            sale = Sale.objects.create(
-                total_amount=total,
-                payment_method=method,
-                customer_name=customer
-            )
-
-            # Deduct stock safely
-            for it in items:
-                p_id = it.get('id') or it.get('product_id')
-                qty = int(it.get('quantity', it.get('qty', 1)))
-                if p_id:
-                    for s_field in ['stock', 'stock_quantity']:
-                        try:
-                            Product.objects.filter(pk=p_id).update(**{s_field: F(s_field) - qty})
-                            break
-                        except Exception:
-                            pass
-
-            return Response({
-                'id': sale.id,
-                'total_amount': total,
-                'payment_method': method,
-                'customer_name': customer,
-            }, status=status.HTTP_201_CREATED)
-
-        except Exception as e:
-            print(f"❌ [SALE CREATE ERROR]: {e}", flush=True)
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CustomerDebtViewSet(viewsets.ModelViewSet):

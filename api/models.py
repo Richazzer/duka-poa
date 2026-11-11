@@ -10,6 +10,8 @@ from django.dispatch import receiver
 
 from django.conf import settings
 
+
+
 class Product(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='products', null=True, blank=True)
     name = models.CharField(max_length=255)
@@ -33,6 +35,7 @@ class CustomerDebt(models.Model):
     notes = models.TextField(blank=True, null=True)
     is_paid = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+
     
 class EmailOTP(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)

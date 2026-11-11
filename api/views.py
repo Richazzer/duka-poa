@@ -27,7 +27,6 @@ from .serializers import (
 
 logger = logging.getLogger(__name__)
 
-# Helper to prevent float(None) crashes
 def safe_num(val, default=0.0):
     if val is None:
         return default
@@ -156,7 +155,7 @@ class CompleteOnboardingView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        user = request.user if request.user.is_authenticated else User.objects.first()
+        user = request.user if (hasattr(request, 'user') and request.user.is_authenticated) else User.objects.first()
         profile, _ = BusinessProfile.objects.get_or_create(user=user)
         return Response({
             'user': {'id': user.id if user else None, 'email': user.email if user else '', 'username': user.username if user else ''},
@@ -164,7 +163,7 @@ class CompleteOnboardingView(APIView):
         }, status=status.HTTP_200_OK)
 
     def post(self, request):
-        user = request.user if request.user.is_authenticated else User.objects.first()
+        user = request.user if (hasattr(request, 'user') and request.user.is_authenticated) else User.objects.first()
         profile, _ = BusinessProfile.objects.get_or_create(user=user)
         serializer = BusinessOnboardingSerializer(profile, data=request.data, partial=True)
         if serializer.is_valid():
@@ -190,12 +189,10 @@ def business_analytics_view(request):
         today = timezone.localdate() if settings.USE_TZ else date.today()
         user = request.user if (hasattr(request, 'user') and request.user.is_authenticated) else None
 
-        # Fetch all records safely
         sales_qs = list(Sale.objects.all().order_by('-id'))
         prod_qs = list(Product.objects.all())
         debt_qs = list(CustomerDebt.objects.filter(is_paid=False))
 
-        # Filter by user if records belong to this user
         if user:
             u_sales = [s for s in sales_qs if getattr(s, 'user_id', None) == user.id]
             if u_sales: sales_qs = u_sales
@@ -204,7 +201,7 @@ def business_analytics_view(request):
             u_debts = [d for d in debt_qs if getattr(d, 'user_id', None) == user.id]
             if u_debts: debt_qs = u_debts
 
-        # 1. Total Warehouse Inventory Valuation
+        # 1. Total Warehouse Inventory Valuation (Your real products!)
         total_inventory_value = 0.0
         low_stock_count = 0
         for p in prod_qs:
@@ -222,10 +219,9 @@ def business_analytics_view(request):
         # 3. Total Lifetime Sales
         all_time_sales = sum(safe_num(getattr(s, 'total_amount', getattr(s, 'amount', 0))) for s in sales_qs)
 
-        # Net Worth = Current Warehouse Stock Value + All Sales Collected + Unpaid Debts Owed to Store
+        # Net Worth = Current Warehouse Stock Value + All Sales + Customer Debts
         business_net_worth = int(total_inventory_value + all_time_sales + total_debt)
 
-        # 4. Safe Date Parsing for Sales
         def sale_date(s):
             dt = getattr(s, 'created_at', getattr(s, 'date', None))
             if isinstance(dt, datetime):
@@ -285,7 +281,7 @@ def business_analytics_view(request):
                 period_sales.extend(m_sales)
                 trend_points.append({"time": m_name, "sales": int(tot), "profit": int(tot * 0.22)})
 
-        else: # daily (covers all 24 hours)
+        else: # daily
             period_label = "Leo (Today)"
             ticker_tf = "1H"
             period_sales = [s for s in sales_qs if sale_date(s) == today]
@@ -297,8 +293,6 @@ def business_analytics_view(request):
 
         total_sales_in_period = sum(safe_num(getattr(s, 'total_amount', getattr(s, 'amount', 0))) for s in period_sales)
         period_profit = int(total_sales_in_period * 0.22)
-
-        print(f"📊 [ANALYTICS SYNC] Net Worth: {business_net_worth:,} | Period Sales: {total_sales_in_period:,} | Products: {len(prod_qs)} | Sales Count: {len(sales_qs)}", flush=True)
 
         return Response({
             "period": period_label,
@@ -313,9 +307,6 @@ def business_analytics_view(request):
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        print(f"❌ [ANALYTICS CRITICAL ERROR]: {e}", flush=True)
         return Response({
             "period": "Leo (Today)",
             "ticker_timeframe": "1H",
@@ -393,7 +384,6 @@ class SaleViewSet(viewsets.ModelViewSet):
         except Exception:
             sale = Sale.objects.create(total_amount=total, payment_method=method, customer_name=customer)
 
-        # Deduct stock
         for it in items:
             p_id = it.get('id') or it.get('product_id')
             qty = int(safe_num(it.get('quantity', it.get('qty', 1))))
@@ -403,7 +393,6 @@ class SaleViewSet(viewsets.ModelViewSet):
                 except Exception:
                     pass
 
-        print(f"✅ [SALE RECORDED]: TZS {total:,.2f} via {method}", flush=True)
         return Response(SaleSerializer(sale).data, status=status.HTTP_201_CREATED)
 
 
@@ -460,4 +449,4 @@ def ocr_invoice_scanner_view(request):
 @authentication_classes([])
 @permission_classes([AllowAny])
 def gemini_ai_assistant_view(request):
-    return Response({'reply': '
+    return Response({'reply': 'Msaidizi wa AI yupo tayari.'}, status=status.HTTP_200_OK)

@@ -455,6 +455,7 @@ class OwnedModelViewSet(viewsets.ModelViewSet):
 # ==============================================================
 
 
+
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by('-id')
     serializer_class = ProductSerializer
@@ -464,7 +465,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         try:
             qs = Product.objects.all().order_by('-id')
-            # Separate products per logged-in user
+            # Separate products per logged-in shop owner
             if request.user and request.user.is_authenticated:
                 user_qs = qs.filter(user=request.user)
                 if user_qs.exists() or not qs.filter(user__isnull=True).exists():
@@ -496,7 +497,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             if not name:
                 return Response({'error': 'Jina la bidhaa linahitajika.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Assign logged-in user if available
+            # Assign to current user if logged in
             user = request.user if (request.user and request.user.is_authenticated) else None
 
             product = Product.objects.create(
@@ -506,7 +507,7 @@ class ProductViewSet(viewsets.ModelViewSet):
                 price=price,
                 stock=stock
             )
-            print(f"✅ [PRODUCT CREATED] ID: {product.id}, Name: {product.name}", flush=True)
+            print(f"✅ [PRODUCT CREATED] ID: {product.id}, User: {user}", flush=True)
 
             return Response({
                 'id': product.id,
@@ -520,7 +521,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             print(f"❌ [PRODUCT CREATE ERROR]: {e}", flush=True)
-            return Response({'error': f'Hitilafu ya kuunda bidhaa: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CustomerDebtViewSet(viewsets.ModelViewSet):

@@ -16,6 +16,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from .models import CustomerDebt, CustomerDebtSerializer
 
 from .models import BusinessProfile, CustomerDebt, EmailOTP, Product, Sale
 from .serializers import (

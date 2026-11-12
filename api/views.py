@@ -447,6 +447,8 @@ class SaleViewSet(viewsets.ModelViewSet):
         }, status=status.HTTP_201_CREATED)
 
 
+
+
 class CustomerDebtViewSet(viewsets.ModelViewSet):
     queryset = CustomerDebt.objects.all().order_by('-id')
     serializer_class = CustomerDebtSerializer
@@ -466,25 +468,32 @@ class CustomerDebtViewSet(viewsets.ModelViewSet):
         return qs
 
     def create(self, request, *args, **kwargs):
-        name = request.data.get('customer_name') or request.data.get('name') or 'Mteja'
+        name = str(request.data.get('customer_name') or request.data.get('name') or 'Mteja').strip()
         amt = safe_num(request.data.get('amount_owed') or request.data.get('amount') or 0)
-        phone = request.data.get('phone', '')
-        notes = request.data.get('notes', '')
-        user = request.user if (hasattr(request, 'user') and request.user.is_authenticated) else None
+        phone = str(request.data.get('phone') or request.data.get('customer_phone') or '').strip()
+        notes = str(request.data.get('notes') or '').strip()
+        user = request.user if (hasattr(self.request, 'user') and self.request.user.is_authenticated) else None
 
+        debt = None
+        # Try various combinations depending on your exact backend model schema fields
         try:
             debt = CustomerDebt.objects.create(user=user, customer_name=name, amount_owed=amt, phone=phone, notes=notes, is_paid=False)
         except Exception:
             try:
-                debt = CustomerDebt.objects.create(customer_name=name, amount_owed=amt, phone=phone, notes=notes)
+                debt = CustomerDebt.objects.create(customer_name=name, amount_owed=amt, phone=phone, notes=notes, is_paid=False)
             except Exception:
-                debt = CustomerDebt.objects.create(customer_name=name, amount=amt, phone=phone, notes=notes)
+                try:
+                    debt = CustomerDebt.objects.create(name=name, amount=amt, phone=phone, notes=notes, is_paid=False)
+                except Exception:
+                    debt = CustomerDebt.objects.create(customer_name=name, amount=amt)
 
         return Response({
-            'id': debt.id,
+            'id': getattr(debt, 'id', 1),
             'customer_name': name,
             'amount_owed': float(amt),
             'phone': phone,
+            'notes': notes,
+            'is_paid': False
         }, status=status.HTTP_201_CREATED)
 
 

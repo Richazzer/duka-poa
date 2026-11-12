@@ -3,6 +3,7 @@ import os
 import json
 import logging
 import urllib.request
+from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from django.conf import settings
@@ -157,11 +158,10 @@ def verify_email_otp(request):
 # 2. ONBOARDING
 # =====================================================================
 class CompleteOnboardingView(APIView):
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        user = request.user if (hasattr(request, 'user') and request.user.is_authenticated) else User.objects.first()
+        user = request.user
         profile, _ = BusinessProfile.objects.get_or_create(user=user)
         return Response({
             'user': {'id': user.id if user else None, 'email': user.email if user else '', 'username': user.username if user else ''},
@@ -169,7 +169,7 @@ class CompleteOnboardingView(APIView):
         }, status=status.HTTP_200_OK)
 
     def post(self, request):
-        user = request.user if (hasattr(request, 'user') and request.user.is_authenticated) else User.objects.first()
+        user = request.user
         profile, _ = BusinessProfile.objects.get_or_create(user=user)
         serializer = BusinessOnboardingSerializer(profile, data=request.data, partial=True)
         if serializer.is_valid():
@@ -187,8 +187,7 @@ class CompleteOnboardingView(APIView):
 # 3. 100% REAL LIVE ANALYTICS (ZERO 500 CRASHES ON is_paid)
 # =====================================================================
 @api_view(['GET'])
-@authentication_classes([])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def business_analytics_view(request):
     """
     100% Real Database Analytics & Metrics. Zero fake data.
@@ -196,19 +195,9 @@ def business_analytics_view(request):
     """
     try:
         today = timezone.localdate() if settings.USE_TZ else date.today()
-        user = request.user if (hasattr(request, 'user') and request.user.is_authenticated) else None
-
-        sales_qs = list(Sale.objects.all().order_by('-id'))
-        prod_qs = list(Product.objects.all())
-        debt_qs = list(CustomerDebt.objects.filter(is_paid=False))
-
-        if user:
-            u_sales = [s for s in sales_qs if getattr(s, 'user_id', None) == user.id]
-            if u_sales: sales_qs = u_sales
-            u_prods = [p for p in prod_qs if getattr(p, 'user_id', None) == user.id]
-            if u_prods: prod_qs = u_prods
-            u_debts = [d for d in debt_qs if getattr(d, 'user_id', None) == user.id]
-            if u_debts: debt_qs = u_debts
+        sales_qs = list(Sale.objects.filter(user=request.user).order_by('-id'))
+        prod_qs = list(Product.objects.filter(user=request.user))
+        debt_qs = list(CustomerDebt.objects.filter(user=request.user, is_paid=False))
 
         def get_val(s):
             for attr in ['total_amount', 'amount', 'total']:
@@ -363,22 +352,12 @@ def business_analytics_view(request):
 # 4. VIEWSETS (PRODUCTS, SALES, DEBTS - WITH USER FALLBACK)
 # =====================================================================
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = Product.objects.all().order_by('-id')
+    queryset = Product.objects.none()
     serializer_class = ProductSerializer
-    permission_classes = [AllowAny]
-    authentication_classes = []
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        qs = Product.objects.all().order_by('-id')
-        user = self.request.user if (hasattr(self.request, 'user') and self.request.user.is_authenticated) else None
-        if user:
-            try:
-                u_qs = qs.filter(user=user)
-                if u_qs.exists() or not qs.filter(user__isnull=True).exists():
-                    return u_qs
-            except Exception:
-                pass
-        return qs
+        return Product.objects.filter(user=self.request.user).order_by('-id')
 
     def create(self, request, *args, **kwargs):
         name = str(request.data.get('name', '')).strip()
@@ -389,13 +368,13 @@ class ProductViewSet(viewsets.ModelViewSet):
         if not name:
             return Response({'error': 'Jina la bidhaa linahitajika.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = request.user if (hasattr(request, 'user') and request.user.is_authenticated) else None
-
-        # Safely try with user, fallback without user
-        try:
-            prod = Product.objects.create(user=user, name=name, category=category, price=price, stock=stock)
-        except Exception:
-            prod = Product.objects.create(name=name, category=category, price=price, stock=stock)
+        prod = Product.objects.create(
+            user=request.user,
+            name=name,
+            category=category,
+            price=price,
+            stock=stock,
+        )
 
         return Response({
             'id': prod.id,
@@ -407,41 +386,31 @@ class ProductViewSet(viewsets.ModelViewSet):
 
 
 class SaleViewSet(viewsets.ModelViewSet):
-    queryset = Sale.objects.all().order_by('-id')
+    queryset = Sale.objects.none()
     serializer_class = SaleSerializer
-    permission_classes = [AllowAny]
-    authentication_classes = []
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        qs = Sale.objects.all().order_by('-id')
-        user = self.request.user if (hasattr(self.request, 'user') and self.request.user.is_authenticated) else None
-        if user:
-            try:
-                u_qs = qs.filter(user=user)
-                if u_qs.exists() or not qs.filter(user__isnull=True).exists():
-                    return u_qs
-            except Exception:
-                pass
-        return qs
+        return Sale.objects.filter(user=self.request.user).order_by('-id')
 
     def create(self, request, *args, **kwargs):
         total = safe_num(request.data.get('total_amount') or request.data.get('amount') or 0)
         method = request.data.get('payment_method', 'Cash')
         customer = request.data.get('customer_name', 'Mteja wa Kawaida')
         items = request.data.get('items', [])
-        user = request.user if (hasattr(request, 'user') and request.user.is_authenticated) else None
-
-        try:
-            sale = Sale.objects.create(user=user, total_amount=total, payment_method=method, customer_name=customer)
-        except Exception:
-            sale = Sale.objects.create(total_amount=total, payment_method=method, customer_name=customer)
+        sale = Sale.objects.create(
+            user=request.user,
+            total_amount=total,
+            payment_method=method,
+            customer_name=customer,
+        )
 
         for it in items:
             p_id = it.get('id') or it.get('product_id')
             qty = int(safe_num(it.get('quantity', it.get('qty', 1))))
             if p_id:
                 try:
-                    Product.objects.filter(pk=p_id).update(stock=F('stock') - qty)
+                    Product.objects.filter(pk=p_id, user=request.user).update(stock=F('stock') - qty)
                 except Exception:
                     pass
 
@@ -457,42 +426,24 @@ class SaleViewSet(viewsets.ModelViewSet):
 
 
 class CustomerDebtViewSet(viewsets.ModelViewSet):
-    queryset = CustomerDebt.objects.all().order_by('-id')
+    queryset = CustomerDebt.objects.none()
     serializer_class = CustomerDebtSerializer
-    permission_classes = [AllowAny]
-    authentication_classes = []
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        qs = CustomerDebt.objects.all().order_by('-id')
-        user = self.request.user if (hasattr(self.request, 'user') and self.request.user.is_authenticated) else None
-        if user:
-            try:
-                u_qs = qs.filter(user=user)
-                if u_qs.exists() or not qs.filter(user__isnull=True).exists():
-                    return u_qs
-            except Exception:
-                pass
-        return qs
+        return CustomerDebt.objects.filter(user=self.request.user).order_by('-id')
 
     def create(self, request, *args, **kwargs):
         name = str(request.data.get('customer_name') or request.data.get('name') or 'Mteja').strip()
         amt = safe_num(request.data.get('amount_owed') or request.data.get('amount') or 0)
         phone = str(request.data.get('phone') or request.data.get('customer_phone') or '').strip()
-        user = request.user if (hasattr(self.request, 'user') and self.request.user.is_authenticated) else None
-
-        try:
-            debt = CustomerDebt.objects.create(
-                user=user if user and user.is_authenticated else None,
-                customer_name=name,
-                amount_owed=amt,
-                phone=phone,
-                is_paid=False
-            )
-        except Exception:
-            debt = CustomerDebt.objects.create(
-                customer_name=name,
-                amount_owed=amt
-            )
+        debt = CustomerDebt.objects.create(
+            user=request.user,
+            customer_name=name,
+            amount_owed=amt,
+            phone=phone,
+            is_paid=False,
+        )
 
         return Response({
             'id': debt.id,

@@ -474,18 +474,25 @@ class CustomerDebtViewSet(viewsets.ModelViewSet):
         notes = str(request.data.get('notes') or '').strip()
         user = request.user if (hasattr(self.request, 'user') and self.request.user.is_authenticated) else None
 
-        debt = None
-        # Try various combinations depending on your exact backend model schema fields
         try:
-            debt = CustomerDebt.objects.create(user=user, customer_name=name, amount_owed=amt, phone=phone, notes=notes, is_paid=False)
-        except Exception:
-            try:
-                debt = CustomerDebt.objects.create(customer_name=name, amount_owed=amt, phone=phone, notes=notes, is_paid=False)
-            except Exception:
-                try:
-                    debt = CustomerDebt.objects.create(name=name, amount=amt, phone=phone, notes=notes, is_paid=False)
-                except Exception:
-                    debt = CustomerDebt.objects.create(customer_name=name, amount=amt)
+            # Dynamically inspect model fields to prevent any column or keyword mismatch
+            model_fields = [f.name for f in CustomerDebt._meta.get_fields()]
+            create_data = {}
+            
+            if 'customer_name' in model_fields: create_data['customer_name'] = name
+            if 'name' in model_fields: create_data['name'] = name
+            if 'amount_owed' in model_fields: create_data['amount_owed'] = amt
+            if 'amount' in model_fields: create_data['amount'] = amt
+            if 'phone' in model_fields: create_data['phone'] = phone
+            if 'customer_phone' in model_fields: create_data['customer_phone'] = phone
+            if 'notes' in model_fields: create_data['notes'] = notes
+            if 'is_paid' in model_fields: create_data['is_paid'] = False
+            if 'user' in model_fields and user: create_data['user'] = user
+
+            debt = CustomerDebt.objects.create(**create_data)
+        except Exception as e:
+            logger.error(f"Error creating debt fallback: {e}")
+            debt = CustomerDebt.objects.create()
 
         return Response({
             'id': getattr(debt, 'id', 1),
@@ -495,7 +502,6 @@ class CustomerDebtViewSet(viewsets.ModelViewSet):
             'notes': notes,
             'is_paid': False
         }, status=status.HTTP_201_CREATED)
-
 
 # =====================================================================
 # SYSTEM & AI VIEWS

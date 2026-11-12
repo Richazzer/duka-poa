@@ -3,6 +3,7 @@ from django.conf import settings
 from rest_framework import serializers
 import secrets
 
+
 class BusinessProfile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='business_profile')
     business_name = models.CharField(max_length=255, blank=True, null=True)
@@ -60,10 +61,6 @@ class CustomerDebt(models.Model):
     def __str__(self):
         return f"{self.customer_name} - {self.amount_owed}"
 
-
-# ==========================================
-# SERIALIZERS (Defined AFTER all models)
-# ==========================================
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:

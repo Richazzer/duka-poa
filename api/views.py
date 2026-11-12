@@ -472,44 +472,29 @@ class CustomerDebtViewSet(viewsets.ModelViewSet):
         name = str(request.data.get('customer_name') or request.data.get('name') or 'Mteja').strip()
         amt = safe_num(request.data.get('amount_owed') or request.data.get('amount') or 0)
         phone = str(request.data.get('phone') or request.data.get('customer_phone') or '').strip()
-        notes = str(request.data.get('notes') or '').strip()
         user = request.user if (hasattr(self.request, 'user') and self.request.user.is_authenticated) else None
 
-        # Direct, zero-failure database insertion avoiding serializer validation blocks
         try:
             debt = CustomerDebt.objects.create(
                 user=user if user and user.is_authenticated else None,
                 customer_name=name,
                 amount_owed=amt,
                 phone=phone,
-                notes=notes,
                 is_paid=False
             )
         except Exception:
-            try:
-                debt = CustomerDebt.objects.create(
-                    customer_name=name,
-                    amount_owed=amt,
-                    phone=phone,
-                    notes=notes,
-                    is_paid=False
-                )
-            except Exception:
-                debt = CustomerDebt.objects.create(
-                    customer_name=name,
-                    amount_owed=amt
-                )
+            debt = CustomerDebt.objects.create(
+                customer_name=name,
+                amount_owed=amt
+            )
 
         return Response({
             'id': debt.id,
             'customer_name': debt.customer_name,
             'amount_owed': float(debt.amount_owed),
             'phone': getattr(debt, 'phone', ''),
-            'notes': getattr(debt, 'notes', ''),
             'is_paid': getattr(debt, 'is_paid', False)
         }, status=status.HTTP_201_CREATED)
-
-
 # =====================================================================
 # SYSTEM & AI VIEWS
 # =====================================================================

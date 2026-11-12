@@ -449,6 +449,9 @@ class SaleViewSet(viewsets.ModelViewSet):
 
 
 
+
+
+
 class CustomerDebtViewSet(viewsets.ModelViewSet):
     queryset = CustomerDebt.objects.all().order_by('-id')
     serializer_class = CustomerDebtSerializer
@@ -468,40 +471,25 @@ class CustomerDebtViewSet(viewsets.ModelViewSet):
         return qs
 
     def create(self, request, *args, **kwargs):
-        name = str(request.data.get('customer_name') or request.data.get('name') or 'Mteja').strip()
-        amt = safe_num(request.data.get('amount_owed') or request.data.get('amount') or 0)
-        phone = str(request.data.get('phone') or request.data.get('customer_phone') or '').strip()
-        notes = str(request.data.get('notes') or '').strip()
-        user = request.user if (hasattr(self.request, 'user') and self.request.user.is_authenticated) else None
+        # Normalize fields coming from the frontend payload
+        data = request.data.copy()
+        if 'amount' in data and 'amount_owed' not in data:
+            data['amount_owed'] = data['amount']
+        if 'name' in data and 'customer_name' not in data:
+            data['customer_name'] = data['name']
+        if 'customer_phone' in data and 'phone' not in data:
+            data['phone'] = data['customer_phone']
 
-        try:
-            # Dynamically inspect model fields to prevent any column or keyword mismatch
-            model_fields = [f.name for f in CustomerDebt._meta.get_fields()]
-            create_data = {}
-            
-            if 'customer_name' in model_fields: create_data['customer_name'] = name
-            if 'name' in model_fields: create_data['name'] = name
-            if 'amount_owed' in model_fields: create_data['amount_owed'] = amt
-            if 'amount' in model_fields: create_data['amount'] = amt
-            if 'phone' in model_fields: create_data['phone'] = phone
-            if 'customer_phone' in model_fields: create_data['customer_phone'] = phone
-            if 'notes' in model_fields: create_data['notes'] = notes
-            if 'is_paid' in model_fields: create_data['is_paid'] = False
-            if 'user' in model_fields and user: create_data['user'] = user
-
-            debt = CustomerDebt.objects.create(**create_data)
-        except Exception as e:
-            logger.error(f"Error creating debt fallback: {e}")
-            debt = CustomerDebt.objects.create()
-
-        return Response({
-            'id': getattr(debt, 'id', 1),
-            'customer_name': name,
-            'amount_owed': float(amt),
-            'phone': phone,
-            'notes': notes,
-            'is_paid': False
-        }, status=status.HTTP_201_CREATED)
+        serializer = self.get_serializer(data=data)
+        if serializer.is_valid():
+            user = request.user if (hasattr(request, 'user') and request.user.is_authenticated) else None
+            try:
+                serializer.save(user=user if user and user.is_authenticated else None)
+            except Exception:
+                serializer.save(user=None)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 # =====================================================================
 # SYSTEM & AI VIEWS

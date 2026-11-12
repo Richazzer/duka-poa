@@ -53,9 +53,9 @@ class CustomerDebt(models.Model):
     customer_name = models.CharField(max_length=255)
     amount_owed = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     phone = models.CharField(max_length=20, blank=True, null=True)
-    notes = models.TextField(blank=True, null=True)
     is_paid = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.customer_name} - {self.amount_owed}"
+

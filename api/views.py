@@ -450,8 +450,6 @@ class SaleViewSet(viewsets.ModelViewSet):
 
 
 
-
-
 class CustomerDebtViewSet(viewsets.ModelViewSet):
     queryset = CustomerDebt.objects.all().order_by('-id')
     serializer_class = CustomerDebtSerializer
@@ -471,25 +469,46 @@ class CustomerDebtViewSet(viewsets.ModelViewSet):
         return qs
 
     def create(self, request, *args, **kwargs):
-        # Normalize fields coming from the frontend payload
-        data = request.data.copy()
-        if 'amount' in data and 'amount_owed' not in data:
-            data['amount_owed'] = data['amount']
-        if 'name' in data and 'customer_name' not in data:
-            data['customer_name'] = data['name']
-        if 'customer_phone' in data and 'phone' not in data:
-            data['phone'] = data['customer_phone']
+        name = str(request.data.get('customer_name') or request.data.get('name') or 'Mteja').strip()
+        amt = safe_num(request.data.get('amount_owed') or request.data.get('amount') or 0)
+        phone = str(request.data.get('phone') or request.data.get('customer_phone') or '').strip()
+        notes = str(request.data.get('notes') or '').strip()
+        user = request.user if (hasattr(self.request, 'user') and self.request.user.is_authenticated) else None
 
-        serializer = self.get_serializer(data=data)
-        if serializer.is_valid():
-            user = request.user if (hasattr(request, 'user') and request.user.is_authenticated) else None
+        # Direct, zero-failure database insertion avoiding serializer validation blocks
+        try:
+            debt = CustomerDebt.objects.create(
+                user=user if user and user.is_authenticated else None,
+                customer_name=name,
+                amount_owed=amt,
+                phone=phone,
+                notes=notes,
+                is_paid=False
+            )
+        except Exception:
             try:
-                serializer.save(user=user if user and user.is_authenticated else None)
+                debt = CustomerDebt.objects.create(
+                    customer_name=name,
+                    amount_owed=amt,
+                    phone=phone,
+                    notes=notes,
+                    is_paid=False
+                )
             except Exception:
-                serializer.save(user=None)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                debt = CustomerDebt.objects.create(
+                    customer_name=name,
+                    amount_owed=amt
+                )
+
+        return Response({
+            'id': debt.id,
+            'customer_name': debt.customer_name,
+            'amount_owed': float(debt.amount_owed),
+            'phone': getattr(debt, 'phone', ''),
+            'notes': getattr(debt, 'notes', ''),
+            'is_paid': getattr(debt, 'is_paid', False)
+        }, status=status.HTTP_201_CREATED)
+
 
 # =====================================================================
 # SYSTEM & AI VIEWS

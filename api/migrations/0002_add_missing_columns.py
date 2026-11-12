@@ -9,15 +9,9 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunSQL(
             sql="""
-            ALTER TABLE api_product ADD COLUMN IF NOT EXISTS user_id integer;
-            ALTER TABLE api_sale ADD COLUMN IF NOT EXISTS user_id integer;
-            ALTER TABLE api_customerdebt ADD COLUMN IF NOT EXISTS user_id integer;
             ALTER TABLE api_customerdebt ADD COLUMN IF NOT EXISTS is_paid boolean DEFAULT false;
             """,
             reverse_sql="""
-            ALTER TABLE api_product DROP COLUMN IF EXISTS user_id;
-            ALTER TABLE api_sale DROP COLUMN IF EXISTS user_id;
-            ALTER TABLE api_customerdebt DROP COLUMN IF EXISTS user_id;
             ALTER TABLE api_customerdebt DROP COLUMN IF EXISTS is_paid;
             """
         ),

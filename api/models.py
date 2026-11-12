@@ -33,6 +33,7 @@ class Product(models.Model):
     category = models.CharField(max_length=100, default='Duka')
     price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     stock = models.IntegerField(default=0)
+    image = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -54,6 +55,8 @@ class CustomerDebt(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='debts', null=True, blank=True)
     customer_name = models.CharField(max_length=255)
     amount_owed = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    status = models.CharField(max_length=50, default='Pending')
+    due_date = models.DateField(blank=True, null=True)
     phone = models.CharField(max_length=20, blank=True, null=True)
     is_paid = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
